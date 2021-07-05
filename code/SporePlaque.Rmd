@@ -1,0 +1,85 @@
+---
+title: "Sppore Plague"
+author: "Jay T. Lennon, Emily Long, Daniel Scwartz"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+header-includes:
+   - \usepackage{array}
+output: pdf_document
+geometry: margin=2.54cm
+---
+
+Does dormancy affect plaque size?
+
+```{r}
+rm(list=ls())
+getwd()
+setwd("~/GitHub/SporePlaque")
+```
+
+Load package for writing figures
+```{r}
+require("png")
+require("grid")
+```
+
+# Distribution of plaque sizes
+Took pictures of plates of plaques that formed either on wild type Bacillus subtilis or on a mutant (spoEII). Measured diameter of plaque sizes using ruler tool in Adobe Photoshop. 
+
+# Load data
+```{r}
+plaques <- read.table("data/20210705_1458_SporePlaque.txt", sep="\t", header=TRUE)
+
+petri.pix <- 476
+petri.diam <- 88 # mm 
+pix <- petri.diam/petri.pix
+# 1 pixel is 0.185 mm
+
+wt.plaque <- plaques$Wildtype / pix
+mut.plaque <- plaques$Mutant / pix
+```
+
+# Make kernel density plots
+```{r}
+wt.kern <- density(wt.plaque) 
+mut.kern <- density(mut.plaque) 
+
+png(filename="~/GitHub/SporePlaque/figures/plaque.size.png",
+    width = 1200, height = 1200, res = 96*2)
+
+plot.new()
+par(mar = c(4, 8, 2, 8))
+plot(wt.kern, main = NA, xaxt = "n", yaxt = "n", cex.lab = 1.5, ylab = "",
+     xlab = "", xlim = c(0, 165), ylim = c(0, 0.055), lwd = 1.5, lty = 3, col = "red")
+lines(mut.kern, lwd = 1.5, lty = 3, col = "blue")
+box(lwd=2)
+
+mtext('Density', side = 2, outer = TRUE, cex = 1.5, 
+      line = -2, adj = 0.5)
+
+mtext('Plaque size (mm)', side = 1, outer = TRUE, 
+      cex = 1.5, line = -1, adj = 0.5)
+
+axis(side = 1, lwd.ticks = 2, cex.axis = 1.5, las = 1,
+    labels = c("0", "50", "100", "150"), at = c(0, 50, 100, 150))
+
+axis(side = 3, lwd.ticks = 2, cex.axis = 1.5, las = 1,
+    at = c(0, 50, 100, 150), labels = F)
+
+axis(side = 2, lwd.ticks = 2, cex.axis = 1.5, las = 1,
+    labels = c("0", "0.025","0.050"), at = c(0, 0.025, 0.050))
+
+axis(side = 4, lwd.ticks = 2, cex.axis = 1.5, las = 1,
+    at = c(0, 0.025, 0.050), labels = F)
+
+text(35, 0.055, labels = "Spore-forming", cex = 0.85, col = "red")
+text(110, 0.025, labels = "Non-spore-forming", cex = 0.85, col = "blue")
+
+# Close Plot Device
+dev.off()
+graphics.off()
+
+# Show Plot
+img <- readPNG("~/GitHub/SporePlaque/figures/plaque.size.png")
+
+grid.raster(img)
+```
