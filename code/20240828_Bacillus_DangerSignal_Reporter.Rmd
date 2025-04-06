@@ -1,0 +1,935 @@
+---
+title: "Bacillus growth curves"
+author: "Jay T. Lennon"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+header-includes:
+   - \usepackage{array}
+output: pdf_document
+geometry: margin = 2.54cm
+---
+
+# Growth curves of Bacillus subtilis: sigf::gfp vs. wildtype
+
+# Clear workspace and set directory
+
+```{r setup}
+rm(list = ls())
+knitr::opts_knit$set(root.dir=normalizePath("~/Github/SporePlaque"))
+getwd()
+```
+
+## Load packages and functions
+
+```{r}
+require("png")
+require("dplyr")
+library("tidyverse")
+require("grid")
+require("tibble")
+require("knitr")
+require("extrafont")
+require("ggrepel");
+require("gridExtra")
+require("contrast")
+sem <- function(x) sqrt(var(x)/length(x))
+cv <- function(x) (sd(x)/mean(x))*100
+```
+
+# Load data
+
+```{r}
+data <- read.csv("~/Github/SporePlaque/data/20240828_Fluor.csv")
+design <- read.csv("~/Github/SporePlaque/data/20240828_OD_design.csv")
+data.OD <- read.csv("~/Github/SporePlaque/data/20240828_OD.csv")
+```
+
+# Change time
+
+```{r}
+# Change times to numeric (hours)
+time <- as.numeric(sub("^(\\d+):(\\d+).*", "\\1.\\2", data$Time))
+```
+
+# Create cell-specific fluorescnce data
+```{r}
+log.data <- log10(data[,2:ncol(data)])
+trunc.od <- data.OD[,2:ncol(data.OD)]
+
+csf.raw <- log.data %>%
+  mutate(across(everything(), ~ . / trunc.od[[cur_column()]]))
+
+csf <- data.frame(time, csf.raw)
+  
+  
+  log.data %>%
+  mutate(across(2:ncol(.), ~ . / data.OD[[cur_column()]]))
+
+csf <- data %>%
+  # Start by keeping the first column unchanged
+  select(1) %>%
+  # Add the division results for columns 2 through n
+  bind_cols(
+    data %>%
+      select(-1) %>%
+      mutate(across(everything(), ~ . / data.OD[[cur_column()]]))
+  )
+```
+
+
+# Create look-up table
+
+```{r}
+# This code chunk reads in the experimental design file
+# Converts 96-well plate layout into long form
+# Then creates column number reference number
+
+# Subset the design file
+media <- design[1:8,1:12]
+wells <- design[9:16,1:12]
+
+# convert 96 well plate format to long format
+media.long <- as.data.frame(pivot_longer(media, cols = everything(), 
+              names_to = "Treatment", values_to = "Value"))
+wells.long <- as.data.frame(pivot_longer(wells, cols = everything(), 
+              names_to = "Treatment", values_to = "Value"))
+
+# Create vector of column numbers
+col.vect <- seq(1, 96)
+
+# Combine into one look up table
+look.table <- data.frame(media.long[,2], wells.long[,2], col.vect)
+colnames(look.table) <- c("media", "well", "col")
+```
+
+
+# Pull out wells by treatment and make data frames
+
+```{r}
+# Following code pulls out vector of column numbers corresponding to a medium
+# Then creates a data frame with time and ODs
+# Need to add one (+1) because of how time in read in
+# Note: there are some wells with no growth that could be removed here
+
+# Minus cells
+nocell.LB.full.wt.col <- look.table %>%
+  filter(media == "LB.full.dead.wt") %>%
+  pull(col)
+nocell.LB.full.wt <- data.frame(time, data[, nocell.LB.full.wt.col+1])
+colnames(nocell.LB.full.wt)[1] <- "time"
+
+nocell.LB.full.sigf.col <- look.table %>%
+  filter(media == "LB.full.dead.sigf") %>%
+  pull(col)
+nocell.LB.full.sigf <- data.frame(time, data[, nocell.LB.full.sigf.col+1])
+colnames(nocell.LB.full.sigf)[1] <- "time"
+
+nocell.LB.dil.wt.col <- look.table %>%
+  filter(media == "LB.dil.dead.wt") %>%
+  pull(col)
+nocell.LB.dil.wt <- data.frame(time, data[, nocell.LB.dil.wt.col+1])
+colnames(nocell.LB.dil.wt)[1] <- "time"
+
+nocell.LB.dil.sigf.col <- look.table %>%
+  filter(media == "LB.dil.dead.sigf") %>%
+  pull(col)
+nocell.LB.dil.sigf <- data.frame(time, data[, nocell.LB.dil.sigf.col+1])
+colnames(nocell.LB.dil.sigf)[1] <- "time"
+
+nocell.DSM.full.wt.col <- look.table %>%
+  filter(media == "DSM.full.dead.wt") %>%
+  pull(col)
+nocell.DSM.full.wt <- data.frame(time, data[, nocell.DSM.full.wt.col+1])
+colnames(nocell.DSM.full.wt)[1] <- "time"
+
+nocell.DSM.full.sigf.col <- look.table %>%
+  filter(media == "DSM.full.dead.sigf") %>%
+  pull(col)
+nocell.DSM.full.sigf <- data.frame(time, data[, nocell.DSM.full.sigf.col+1])
+colnames(nocell.DSM.full.sigf)[1] <- "time"
+
+nocell.DSM.dil.wt.col <- look.table %>%
+  filter(media == "DSM.dil.dead.wt") %>%
+  pull(col)
+nocell.DSM.dil.wt <- data.frame(time, data[, nocell.DSM.dil.wt.col+1])
+colnames(nocell.CDSM.dil.wt)[1] <- "time"
+
+nocell.DSM.dil.sigf.col <- look.table %>%
+  filter(media == "DSM.dil.dead.sigf") %>%
+  pull(col)
+nocell.DSM.dil.sigf <- data.frame(time, data[, nocell.DSM.dil.sigf.col+1])
+colnames(nocell.DSM.dil.sigf)[1] <- "time"
+
+nocell.CDSM.full.wt.col <- look.table %>%
+  filter(media == "CDSM.full.dead.wt") %>%
+  pull(col)
+nocell.CDSM.full.wt <- data.frame(time, data[, nocell.CDSM.full.wt.col+1])
+colnames(nocell.CDSM.full.wt)[1] <- "time"
+
+nocell.CDSM.full.sigf.col <- look.table %>%
+  filter(media == "CDSM.full.dead.sigf") %>%
+  pull(col)
+nocell.CDSM.full.sigf <- data.frame(time, data[, nocell.CDSM.full.sigf.col+1])
+colnames(nocell.CDSM.full.sigf)[1] <- "time"
+
+nocell.CDSM.dil.wt.col <- look.table %>%
+  filter(media == "CDSM.dil.dead.wt") %>%
+  pull(col)
+nocell.CDSM.dil.wt <- data.frame(time, data[, nocell.CDSM.dil.wt.col+1])
+colnames(nocell.CDSM.dil.wt)[1] <- "time"
+
+nocell.CDSM.dil.sigf.col <- look.table %>%
+  filter(media == "CDSM.dil.dead.sigf") %>%
+  pull(col)
+nocell.CDSM.dil.sigf <- data.frame(time, data[, nocell.CDSM.dil.sigf.col+1])
+colnames(nocell.CDSM.dil.sigf)[1] <- "time"
+
+
+# Plus cells
+cell.LB.full.wt.col <- look.table %>%
+  filter(media == "LB.full.live.wt") %>%
+  pull(col)
+cell.LB.full.wt <- data.frame(time, data[, cell.LB.full.wt.col+1])
+colnames(cell.LB.full.wt)[1] <- "time"
+
+cell.LB.full.sigf.col <- look.table %>%
+  filter(media == "LB.full.live.sigf") %>%
+  pull(col)
+cell.LB.full.sigf <- data.frame(time, data[, cell.LB.full.sigf.col+1])
+colnames(cell.LB.full.sigf)[1] <- "time"
+
+cell.LB.dil.wt.col <- look.table %>%
+  filter(media == "LB.dil.live.wt") %>%
+  pull(col)
+cell.LB.dil.wt <- data.frame(time, data[, cell.LB.dil.wt.col+1])
+colnames(cell.LB.dil.wt)[1] <- "time"
+
+cell.LB.dil.sigf.col <- look.table %>%
+  filter(media == "LB.dil.live.sigf") %>%
+  pull(col)
+cell.LB.dil.sigf <- data.frame(time, data[, cell.LB.dil.sigf.col+1])
+colnames(cell.LB.dil.sigf)[1] <- "time"
+
+cell.DSM.full.wt.col <- look.table %>%
+  filter(media == "DSM.full.live.wt") %>%
+  pull(col)
+cell.DSM.full.wt <- data.frame(time, data[, cell.DSM.full.wt.col+1])
+colnames(cell.DSM.full.wt)[1] <- "time"
+
+cell.DSM.full.sigf.col <- look.table %>%
+  filter(media == "DSM.full.live.sigf") %>%
+  pull(col)
+cell.DSM.full.sigf <- data.frame(time, data[, cell.DSM.full.sigf.col+1])
+colnames(cell.DSM.full.sigf)[1] <- "time"
+
+cell.DSM.dil.wt.col <- look.table %>%
+  filter(media == "DSM.dil.live.wt") %>%
+  pull(col)
+cell.DSM.dil.wt <- data.frame(time, data[, cell.DSM.dil.wt.col+1])
+colnames(cell.DSM.dil.wt)[1] <- "time"
+
+cell.DSM.dil.sigf.col <- look.table %>%
+  filter(media == "DSM.dil.live.sigf") %>%
+  pull(col)
+cell.DSM.dil.sigf <- data.frame(time, data[, cell.DSM.dil.sigf.col+1])
+colnames(cell.DSM.dil.sigf)[1] <- "time"
+
+cell.CDSM.full.wt.col <- look.table %>%
+  filter(media == "CDSM.full.live.wt") %>%
+  pull(col)
+cell.CDSM.full.wt <- data.frame(time, data[, cell.CDSM.full.wt.col+1])
+colnames(cell.CDSM.full.wt)[1] <- "time"
+
+cell.CDSM.full.sigf.col <- look.table %>%
+  filter(media == "CDSM.full.live.sigf") %>%
+  pull(col)
+cell.CDSM.full.sigf <- data.frame(time, data[, cell.CDSM.full.sigf.col+1])
+colnames(cell.CDSM.full.sigf)[1] <- "time"
+
+cell.CDSM.dil.wt.col <- look.table %>%
+  filter(media == "CDSM.dil.live.wt") %>%
+  pull(col)
+cell.CDSM.dil.wt <- data.frame(time, data[, cell.CDSM.dil.wt.col+1])
+colnames(cell.CDSM.dil.wt)[1] <- "time"
+
+cell.CDSM.dil.sigf.col <- look.table %>%
+  filter(media == "CDSM.dil.live.sigf") %>%
+  pull(col)
+cell.CDSM.dil.sigf <- data.frame(time, data[, cell.CDSM.dil.sigf.col+1])
+colnames(cell.CDSM.dil.sigf)[1] <- "time"
+```
+
+
+# Make no-cell figure
+
+```{r}
+
+# Following line initiate location to write file
+png(filename ="~/Github/SporePlaque/figures/20240828_nocell.png", 
+    width = 800, height = 1200, res = 96 * 2) 
+
+# Start plot 
+plot.new()
+
+# Define plotting margins
+#par(mar = c(7, 7, 5, 7))
+#par(mfrow = c(3, 1))
+#par(mfrow = c(3, 1), mar = c(5, 5, 3, 5))
+par(mfrow = c(3, 1), mar = c(4, 8, 1, 8), oma = c(0, 0, 0, 0))
+
+# Plot 1 - LB medium
+
+# Make plot full strength LB (wt) no cells
+plot(nocell.LB.full.wt[,1], nocell.LB.full.wt[,2], xlim = c(-1, 25), 
+     ylim = c(0, 40000), type = "l", 
+     lty = 1, col = "grey", lwd = 2, ylab = "", xlab = "", 
+     cex.lab = 1.5, las = 1, yaxt = "n", xaxt = "n")
+
+# Add lines for other replicates (color = grey)
+# We just plotted column 2 and 1
+# Now we plot column 3 and 1, and so forth
+for(i in 3:ncol(nocell.LB.full.wt)) {
+  lines(nocell.LB.full.wt[,1], nocell.LB.full.wt[,i], col = "grey", lty = 1)  
+}
+
+# Add full strength LB (sigf) no cells
+for(i in 2:ncol(nocell.LB.full.sigf)) {
+  lines(nocell.LB.full.sigf[,1], nocell.LB.full.sigf[,i], col = "grey", lty = 1)  
+}
+
+# Add diluted LB (wt) no cells
+for(i in 2:ncol(nocell.LB.dil.wt)) {
+  lines(nocell.LB.dil.wt[,1], nocell.LB.dil.wt[,i], col = "grey", lty = 2)  
+}
+
+# Add diluted LB (sigf) no cells
+for(i in 2:ncol(nocell.LB.dil.sigf)) {
+  lines(nocell.LB.dil.sigf[,1], nocell.LB.dil.sigf[,i], col = "grey", lty = 2)  
+}
+
+# Add box around plot
+box(lwd = 2)
+
+# Add axis ticks and labels
+axis(side = 2, lwd.ticks = 2, las = 1, cex.axis = 1.25, 
+     labels = c("0", "10000", "20000", "30000"), at = c(0, 10000, 20000, 30000))
+
+axis(side = 4, labels = F, lwd.ticks = 2, at = c(0, 10000, 20000, 30000))
+
+axis(side = 1, lwd.ticks = 2, cex.axis = 1.25, las = 1, mgp = c(1, 1, 0),
+#    labels = c("0", "12", "24"), at = c(0, 12, 24))
+     labels = F, at = c(0, 12, 24))
+
+axis(side = 3, labels = F, lwd.ticks = 2, las = 1, cex.axis = 1, 
+   at = c(0, 12, 24))
+
+# Add axis labels
+mtext('Fluorescence (RFU)', side = 2, outer = TRUE, cex = 1.5, 
+      line = -2.5, adj = 0.6)
+
+#mtext('Time (h)', side = 1, outer = TRUE, cex = 1.5, 
+#      line = -4, adj = 0.5)
+
+# Add a legend
+legend("topleft", legend = c("LB (full)", "LB (diluted)"), 
+       col = c("grey", "grey"), lty = c(1, 2), 
+       cex = 1, bty = "n", bg = "transparent", seg.len = 1)
+
+# Plot 2 - DSM medium
+
+# Make plot full strength DSM (wt) no cells
+plot(nocell.DSM.full.wt[,1], nocell.DSM.full.wt[,2], xlim = c(-1, 25), 
+     ylim = c(0, 40000), type = "l", 
+     lty = 1, col = "grey", lwd = 2, ylab = "", xlab = "", 
+     cex.lab = 1.5, las = 1, yaxt = "n", xaxt = "n")
+
+# Add lines for other replicates (color = grey)
+# We just plotted column 2 and 1
+# Now we plot column 3 and 1, and so forth
+for(i in 3:ncol(nocell.DSM.full.wt)) {
+  lines(nocell.DSM.full.wt[,1], nocell.DSM.full.wt[,i], col = "grey", lty = 1)  
+}
+
+# Add full strength DSM (sigf) no cells
+for(i in 2:ncol(nocell.DSM.full.sigf)) {
+  lines(nocell.DSM.full.sigf[,1], nocell.DSM.full.sigf[,i], col = "grey", lty = 1)  
+}
+
+# Add diluted DSM (wt) no cells
+for(i in 2:ncol(nocell.DSM.dil.wt)) {
+  lines(nocell.DSM.dil.wt[,1], nocell.DSM.dil.wt[,i], col = "grey", lty = 2)  
+}
+
+# Add diluted DSM (sigf) no cells
+for(i in 2:ncol(nocell.DSM.dil.sigf)) {
+  lines(nocell.DSM.dil.sigf[,1], nocell.DSM.dil.sigf[,i], col = "grey", lty = 2)  
+}
+
+# Add box around plot
+box(lwd = 2)
+
+# Add axis ticks and labels
+axis(side = 2, lwd.ticks = 2, las = 1, cex.axis = 1.25, 
+     labels = c("0", "10000", "20000", "30000"), at = c(0, 10000, 20000, 30000))
+
+axis(side = 4, labels = F, lwd.ticks = 2, at = c(0, 10000, 20000, 30000))
+
+axis(side = 1, lwd.ticks = 2, cex.axis = 1.25, las = 1, mgp = c(1, 1, 0),
+#    labels = c("0", "12", "24"), at = c(0, 12, 24))
+     labels = F, at = c(0, 12, 24))
+
+axis(side = 3, labels = F, lwd.ticks = 2, las = 1, cex.axis = 1, 
+   at = c(0, 12, 24))
+
+# Add axis labels
+mtext('Fluorescence (RFU)', side = 2, outer = TRUE, cex = 1.5, 
+      line = -2.5, adj = 0.6)
+
+#mtext('Time (h)', side = 1, outer = TRUE, cex = 1.5, 
+#      line = -4, adj = 0.5)
+
+# Add a legend
+legend("topleft", legend = c("DSM (full)", "DSM (diluted)"), 
+       col = c("grey", "grey"), lty = c(1, 2), 
+       cex = 1, bty = "n", bg = "transparent", seg.len = 1)
+
+# Plot 3 - CDSM medium
+
+# Make plot full strength DSM (wt) no cells
+plot(nocell.CDSM.full.wt[,1], nocell.CDSM.full.wt[,2], xlim = c(-1, 25), 
+     ylim = c(0, 1000), type = "l", 
+     lty = 1, col = "grey", lwd = 2, ylab = "", xlab = "", 
+     cex.lab = 1.5, las = 1, yaxt = "n", xaxt = "n")
+
+# Add lines for other replicates (color = grey)
+# We just plotted column 2 and 1
+# Now we plot column 3 and 1, and so forth
+for(i in 3:ncol(nocell.CDSM.full.wt)) {
+  lines(nocell.CDSM.full.wt[,1], nocell.CDSM.full.wt[,i], col = "grey", lty = 1)  
+}
+
+# Add full strength DSM (sigf) no cells
+for(i in 2:ncol(nocell.CDSM.full.sigf)) {
+  lines(nocell.CDSM.full.sigf[,1], nocell.CDSM.full.sigf[,i], col = "grey", lty = 1)  
+}
+
+# Add diluted DSM (wt) no cells
+for(i in 2:ncol(nocell.CDSM.dil.wt)) {
+  lines(nocell.CDSM.dil.wt[,1], nocell.CDSM.dil.wt[,i], col = "grey", lty = 2)  
+}
+
+# Add diluted CDSM (sigf) no cells
+for(i in 2:ncol(nocell.CDSM.dil.sigf)) {
+  lines(nocell.CDSM.dil.sigf[,1], nocell.CDSM.dil.sigf[,i], col = "grey", lty = 2)  
+}
+
+# Add box around plot
+box(lwd = 2)
+
+# Add axis ticks and labels
+axis(side = 2, lwd.ticks = 2, las = 1, cex.axis = 1.25, 
+     labels = c("0", "500", "1000"), at = c(0, 500, 1000))
+
+axis(side = 4, labels = F, lwd.ticks = 2, at = c(0, 500, 1000))
+
+axis(side = 1, lwd.ticks = 2, cex.axis = 1.25, las = 1, mgp = c(1, 1, 0),
+    labels = c("0", "12", "24"), at = c(0, 12, 24))
+
+axis(side = 3, labels = F, lwd.ticks = 2, las = 1, cex.axis = 1, 
+   at = c(0, 12, 24))
+
+# Add axis labels
+mtext('Fluorescence (RFU)', side = 2, outer = TRUE, cex = 1.5, 
+      line = -2.5, adj = 0.6)
+
+mtext('Time (h)', side = 1, outer = TRUE, cex = 1.5, 
+      line = -1, adj = 0.5)
+
+# Add a legend
+legend("topleft", legend = c("CDSM (full)", "CDSM (diluted)"), 
+       col = c("grey", "grey"), lty = c(1, 2), 
+       cex = 1, bty = "n", bg = "transparent", seg.len = 1)
+
+# Close plot device (completes writing of file)
+dev.off()
+graphics.off()
+
+# Shows plot in R console window
+img <- readPNG("~/Github/SporePlaque/figures/20240828_nocell.png")
+grid.raster(img)
+```
+
+
+# Make plus-cell figure
+
+```{r}
+
+# Following line initiate location to write file
+png(filename ="~/Github/SporePlaque/figures/20240828_pluscell.png", 
+    width = 800, height = 1200, res = 96 * 2) 
+
+# Start plot 
+plot.new()
+
+# Define plotting margins
+#par(mar = c(7, 7, 5, 7))
+#par(mfrow = c(3, 1))
+#par(mfrow = c(3, 1), mar = c(5, 5, 3, 5))
+par(mfrow = c(3, 1), mar = c(4, 8, 1, 8), oma = c(0, 0, 0, 0))
+
+# Plot 1 - LB medium
+
+# Make plot full strength LB (wt) cells
+plot(cell.LB.full.wt[,1], cell.LB.full.wt[,2], xlim = c(-1, 25), 
+     ylim = c(0, 40000), type = "l", 
+     lty = 1, col = "grey", lwd = 2, ylab = "", xlab = "", 
+     cex.lab = 1.5, las = 1, yaxt = "n", xaxt = "n")
+
+# Add lines for other replicates (color = grey)
+# We just plotted column 2 and 1
+# Now we plot column 3 and 1, and so forth
+for(i in 3:ncol(cell.LB.full.wt)) {
+  lines(cell.LB.full.wt[,1], cell.LB.full.wt[,i], col = "grey", lty = 1)  
+}
+
+# Add full strength LB (sigf) cells
+for(i in 2:ncol(cell.LB.full.sigf)) {
+  lines(cell.LB.full.sigf[,1], cell.LB.full.sigf[,i], col = "green", lty = 1)  
+}
+
+# Add diluted LB (wt) cells
+for(i in 2:ncol(cell.LB.dil.wt)) {
+  lines(cell.LB.dil.wt[,1], cell.LB.dil.wt[,i], col = "grey", lty = 2)  
+}
+
+# Add diluted LB (sigf) cells
+for(i in 2:ncol(cell.LB.dil.sigf)) {
+  lines(cell.LB.dil.sigf[,1], cell.LB.dil.sigf[,i], col = "green", lty = 2)  
+}
+
+# Add box around plot
+box(lwd = 2)
+
+# Add axis ticks and labels
+axis(side = 2, lwd.ticks = 2, las = 1, cex.axis = 1.25, 
+     labels = c("0", "10000", "20000", "30000"), at = c(0, 10000, 20000, 30000))
+
+axis(side = 4, labels = F, lwd.ticks = 2, at = c(0, 10000, 20000, 30000))
+
+axis(side = 1, lwd.ticks = 2, cex.axis = 1.25, las = 1, mgp = c(1, 1, 0),
+#    labels = c("0", "12", "24"), at = c(0, 12, 24))
+     labels = F, at = c(0, 12, 24))
+
+axis(side = 3, labels = F, lwd.ticks = 2, las = 1, cex.axis = 1, 
+   at = c(0, 12, 24))
+
+# Add axis labels
+mtext('Fluorescence (RFU)', side = 2, outer = TRUE, cex = 1.5, 
+      line = -2.5, adj = 0.6)
+
+#mtext('Time (h)', side = 1, outer = TRUE, cex = 1.5, 
+#      line = -4, adj = 0.5)
+
+# Add a legend
+legend("topleft", legend = c("LB (full)", "LB (diluted)", "LB (full)", "LB (diluted)"), 
+       col = c("grey", "grey", "green", "green"), lty = c(1, 2, 1, 2), 
+       cex = 1, bty = "n", bg = "transparent", seg.len = 1)
+
+# Plot 2 - DSM medium
+
+# Make plot full strength DSM (wt) cells
+plot(cell.DSM.full.wt[,1], cell.DSM.full.wt[,2], xlim = c(-1, 25), 
+     ylim = c(0, 40000), type = "l", 
+     lty = 1, col = "grey", lwd = 2, ylab = "", xlab = "", 
+     cex.lab = 1.5, las = 1, yaxt = "n", xaxt = "n")
+
+# Add lines for other replicates (color = grey)
+# We just plotted column 2 and 1
+# Now we plot column 3 and 1, and so forth
+for(i in 3:ncol(cell.DSM.full.wt)) {
+  lines(cell.DSM.full.wt[,1], cell.DSM.full.wt[,i], col = "grey", lty = 1)  
+}
+
+# Add full strength DSM (sigf)  cells
+for(i in 2:ncol(cell.DSM.full.sigf)) {
+  lines(cell.DSM.full.sigf[,1], cell.DSM.full.sigf[,i], col = "green", lty = 1)  
+}
+
+# Add diluted DSM (wt) cells
+for(i in 2:ncol(cell.DSM.dil.wt)) {
+  lines(cell.DSM.dil.wt[,1], cell.DSM.dil.wt[,i], col = "grey", lty = 2)  
+}
+
+# Add diluted DSM (sigf) no cells
+for(i in 2:ncol(cell.DSM.dil.sigf)) {
+  lines(cell.DSM.dil.sigf[,1], cell.DSM.dil.sigf[,i], col = "green", lty = 2)  
+}
+
+# Add box around plot
+box(lwd = 2)
+
+# Add axis ticks and labels
+axis(side = 2, lwd.ticks = 2, las = 1, cex.axis = 1.25, 
+     labels = c("0", "10000", "20000", "30000"), at = c(0, 10000, 20000, 30000))
+
+axis(side = 4, labels = F, lwd.ticks = 2, at = c(0, 10000, 20000, 30000))
+
+axis(side = 1, lwd.ticks = 2, cex.axis = 1.25, las = 1, mgp = c(1, 1, 0),
+#    labels = c("0", "12", "24"), at = c(0, 12, 24))
+     labels = F, at = c(0, 12, 24))
+
+axis(side = 3, labels = F, lwd.ticks = 2, las = 1, cex.axis = 1, 
+   at = c(0, 12, 24))
+
+# Add axis labels
+mtext('Fluorescence (RFU)', side = 2, outer = TRUE, cex = 1.5, 
+      line = -2.5, adj = 0.6)
+
+#mtext('Time (h)', side = 1, outer = TRUE, cex = 1.5, 
+#      line = -4, adj = 0.5)
+
+# Add a legend
+legend("topleft", legend = c("DSM (full)", "DSM (diluted)", "DSM (full)", "DSM (diluted)"), 
+       col = c("grey", "grey", "green", "green"), lty = c(1, 2, 1, 2), 
+       cex = 1, bty = "n", bg = "transparent", seg.len = 1)
+
+# Plot 3 - CDSM medium
+
+# Make plot full strength DSM (wt) cells
+plot(cell.CDSM.full.wt[,1], cell.CDSM.full.wt[,2], xlim = c(-1, 25), 
+     ylim = c(0, 2500), type = "l", 
+     lty = 1, col = "grey", lwd = 2, ylab = "", xlab = "", 
+     cex.lab = 1.5, las = 1, yaxt = "n", xaxt = "n")
+
+# Add lines for other replicates (color = grey)
+# We just plotted column 2 and 1
+# Now we plot column 3 and 1, and so forth
+for(i in 3:ncol(cell.CDSM.full.wt)) {
+  lines(cell.CDSM.full.wt[,1], cell.CDSM.full.wt[,i], col = "grey", lty = 1)  
+}
+
+# Add full strength DSM (sigf) cells
+for(i in 2:ncol(cell.CDSM.full.sigf)) {
+  lines(cell.CDSM.full.sigf[,1], cell.CDSM.full.sigf[,i], col = "green", lty = 1)  
+}
+
+# Add diluted DSM (wt)  cells
+for(i in 2:ncol(cell.CDSM.dil.wt)) {
+  lines(cell.CDSM.dil.wt[,1], cell.CDSM.dil.wt[,i], col = "grey", lty = 2)  
+}
+
+# Add diluted CDSM (sigf) cells
+for(i in 2:ncol(cell.CDSM.dil.sigf)) {
+  lines(cell.CDSM.dil.sigf[,1], cell.CDSM.dil.sigf[,i], col = "green", lty = 2)  
+}
+
+# Add box around plot
+box(lwd = 2)
+
+# Add axis ticks and labels
+axis(side = 2, lwd.ticks = 2, las = 1, cex.axis = 1.25, 
+     labels = c("0", "1000", "2000"), at = c(0, 1000, 2000))
+
+axis(side = 4, labels = F, lwd.ticks = 2, at = c(0, 1000, 2000))
+
+axis(side = 1, lwd.ticks = 2, cex.axis = 1.25, las = 1, mgp = c(1, 1, 0),
+    labels = c("0", "12", "24"), at = c(0, 12, 24))
+
+axis(side = 3, labels = F, lwd.ticks = 2, las = 1, cex.axis = 1, 
+   at = c(0, 12, 24))
+
+# Add axis labels
+mtext('Fluorescence (RFU)', side = 2, outer = TRUE, cex = 1.5, 
+      line = -2.5, adj = 0.6)
+
+mtext('Time (h)', side = 1, outer = TRUE, cex = 1.5, 
+      line = -1, adj = 0.5)
+
+# Add a legend
+legend("topleft", legend = c("CDSM (full)", "CDSM (diluted)", "CDSM (full)", "CDSM (diluted)"), 
+       col = c("grey", "grey", "green", "green"), lty = c(1, 2, 1, 2), 
+       cex = 1, bty = "n", bg = "transparent", seg.len = 1)
+
+# Close plot device (completes writing of file)
+dev.off()
+graphics.off()
+
+# Shows plot in R console window
+img <- readPNG("~/Github/SporePlaque/figures/20240828_pluscell.png")
+grid.raster(img)
+```
+
+
+### Cell-specific fluorescence
+
+```{r}
+# Plus cells
+csf.LB.full.wt.col <- look.table %>%
+  filter(media == "LB.full.live.wt") %>%
+  pull(col)
+csf.LB.full.wt <- data.frame(time, csf[, cell.LB.full.wt.col+1])
+colnames(csf.LB.full.wt)[1] <- "time"
+
+csf.LB.full.sigf.col <- look.table %>%
+  filter(media == "LB.full.live.sigf") %>%
+  pull(col)
+csf.LB.full.sigf <- data.frame(time, csf[, cell.LB.full.sigf.col+1])
+colnames(csf.LB.full.sigf)[1] <- "time"
+
+csf.LB.dil.wt.col <- look.table %>%
+  filter(media == "LB.dil.live.wt") %>%
+  pull(col)
+csf.LB.dil.wt <- data.frame(time, csf[, cell.LB.dil.wt.col+1])
+colnames(csf.LB.dil.wt)[1] <- "time"
+
+csf.LB.dil.sigf.col <- look.table %>%
+  filter(media == "LB.dil.live.sigf") %>%
+  pull(col)
+csf.LB.dil.sigf <- data.frame(time, csf[, cell.LB.dil.sigf.col+1])
+colnames(csf.LB.dil.sigf)[1] <- "time"
+
+csf.DSM.full.wt.col <- look.table %>%
+  filter(media == "DSM.full.live.wt") %>%
+  pull(col)
+csf.DSM.full.wt <- data.frame(time, csf[, cell.DSM.full.wt.col+1])
+colnames(csf.DSM.full.wt)[1] <- "time"
+
+csf.DSM.full.sigf.col <- look.table %>%
+  filter(media == "DSM.full.live.sigf") %>%
+  pull(col)
+csf.DSM.full.sigf <- data.frame(time, csf[, cell.DSM.full.sigf.col+1])
+colnames(csf.DSM.full.sigf)[1] <- "time"
+
+csf.DSM.dil.wt.col <- look.table %>%
+  filter(media == "DSM.dil.live.wt") %>%
+  pull(col)
+csf.DSM.dil.wt <- data.frame(time, csf[, cell.DSM.dil.wt.col+1])
+colnames(csf.DSM.dil.wt)[1] <- "time"
+
+csf.DSM.dil.sigf.col <- look.table %>%
+  filter(media == "DSM.dil.live.sigf") %>%
+  pull(col)
+csf.DSM.dil.sigf <- data.frame(time, csf[, cell.DSM.dil.sigf.col+1])
+colnames(csf.DSM.dil.sigf)[1] <- "time"
+
+csf.CDSM.full.wt.col <- look.table %>%
+  filter(media == "CDSM.full.live.wt") %>%
+  pull(col)
+csf.CDSM.full.wt <- data.frame(time, csf[, cell.CDSM.full.wt.col+1])
+colnames(csf.CDSM.full.wt)[1] <- "time"
+
+csf.CDSM.full.sigf.col <- look.table %>%
+  filter(media == "CDSM.full.live.sigf") %>%
+  pull(col)
+csf.CDSM.full.sigf <- data.frame(time, csf[, cell.CDSM.full.sigf.col+1])
+colnames(csf.CDSM.full.sigf)[1] <- "time"
+
+csf.CDSM.dil.wt.col <- look.table %>%
+  filter(media == "CDSM.dil.live.wt") %>%
+  pull(col)
+csf.CDSM.dil.wt <- data.frame(time, csf[, cell.CDSM.dil.wt.col+1])
+colnames(csf.CDSM.dil.wt)[1] <- "time"
+
+csf.CDSM.dil.sigf.col <- look.table %>%
+  filter(media == "CDSM.dil.live.sigf") %>%
+  pull(col)
+csf.CDSM.dil.sigf <- data.frame(time, csf[, cell.CDSM.dil.sigf.col+1])
+colnames(csf.CDSM.dil.sigf)[1] <- "time"
+```
+
+
+# Make cell-specific fluorescence figure
+```{r}
+# Following line initiate location to write file
+png(filename ="~/Github/SporePlaque/figures/20240828_csf.png", 
+    width = 800, height = 1200, res = 96 * 2) 
+
+# Start plot 
+plot.new()
+
+# Define plotting margins
+#par(mar = c(7, 7, 5, 7))
+#par(mfrow = c(3, 1))
+#par(mfrow = c(3, 1), mar = c(5, 5, 3, 5))
+par(mfrow = c(3, 1), mar = c(4, 8, 1, 8), oma = c(0, 0, 0, 0))
+
+# Plot 1 - LB medium
+
+# Make plot full strength LB (wt) cells
+plot(csf.LB.full.wt[,1], csf.LB.full.wt[,2], xlim = c(-1, 25), 
+     ylim = c(0, 20), type = "l", 
+     lty = 1, col = "grey", lwd = 2, ylab = "", xlab = "", 
+     cex.lab = 1.5, las = 1, yaxt = "n", xaxt = "n")
+
+# Add lines for other replicates (color = grey)
+# We just plotted column 2 and 1
+# Now we plot column 3 and 1, and so forth
+for(i in 3:ncol(cell.LB.full.wt)) {
+  lines(csf.LB.full.wt[,1], csf.LB.full.wt[,i], col = "grey", lty = 1)  
+}
+
+# Add full strength LB (sigf) cells
+for(i in 2:ncol(csf.LB.full.sigf)) {
+  lines(csf.LB.full.sigf[,1], csf.LB.full.sigf[,i], col = "green", lty = 1)  
+}
+
+# Add diluted LB (wt) cells
+for(i in 2:ncol(cell.LB.dil.wt)) {
+  lines(csf.LB.dil.wt[,1], csf.LB.dil.wt[,i], col = "grey", lty = 2)  
+}
+
+# Add diluted LB (sigf) cells
+for(i in 2:ncol(csf.LB.dil.sigf)) {
+  lines(csf.LB.dil.sigf[,1], csf.LB.dil.sigf[,i], col = "green", lty = 2)  
+}
+
+# Add box around plot
+box(lwd = 2)
+
+# Add axis ticks and labels
+axis(side = 2, lwd.ticks = 2, las = 1, cex.axis = 1.25, 
+     labels = c("0", "10", "20"), at = c(0, 10, 20))
+
+axis(side = 4, labels = F, lwd.ticks = 2, at = c(0, 10, 20))
+
+axis(side = 1, lwd.ticks = 2, cex.axis = 1.25, las = 1, mgp = c(1, 1, 0),
+#    labels = c("0", "12", "24"), at = c(0, 12, 24))
+     labels = F, at = c(0, 12, 24))
+
+axis(side = 3, labels = F, lwd.ticks = 2, las = 1, cex.axis = 1, 
+   at = c(0, 12, 24))
+
+# Add axis labels
+mtext('Cell-specific fluorescence', side = 2, outer = TRUE, cex = 1.5, 
+      line = -2.5, adj = 0.6)
+
+#mtext('Time (h)', side = 1, outer = TRUE, cex = 1.5, 
+#      line = -4, adj = 0.5)
+
+# Add a legend
+legend("topleft", legend = c("LB (full)", "LB (diluted)", "LB (full)", "LB (diluted)"), 
+       col = c("grey", "grey", "green", "green"), lty = c(1, 2, 1, 2), 
+       cex = 1, bty = "n", bg = "transparent", seg.len = 1)
+
+# Plot 2 - DSM medium
+
+# Make plot full strength DSM (wt) cells
+plot(csf.DSM.full.wt[,1], csf.DSM.full.wt[,2], xlim = c(-1, 25), 
+     ylim = c(0, 20), type = "l", 
+     lty = 1, col = "grey", lwd = 2, ylab = "", xlab = "", 
+     cex.lab = 1.5, las = 1, yaxt = "n", xaxt = "n")
+
+# Add lines for other replicates (color = grey)
+# We just plotted column 2 and 1
+# Now we plot column 3 and 1, and so forth
+for(i in 3:ncol(csf.DSM.full.wt)) {
+  lines(csf.DSM.full.wt[,1], csf.DSM.full.wt[,i], col = "grey", lty = 1)  
+}
+
+# Add full strength DSM (sigf)  cells
+for(i in 2:ncol(csf.DSM.full.sigf)) {
+  lines(csf.DSM.full.sigf[,1], csf.DSM.full.sigf[,i], col = "green", lty = 1)  
+}
+
+# Add diluted DSM (wt) cells
+for(i in 2:ncol(csf.DSM.dil.wt)) {
+  lines(csf.DSM.dil.wt[,1], csf.DSM.dil.wt[,i], col = "grey", lty = 2)  
+}
+
+# Add diluted DSM (sigf) cells
+for(i in 2:ncol(csf.DSM.dil.sigf)) {
+  lines(csf.DSM.dil.sigf[,1], csf.DSM.dil.sigf[,i], col = "green", lty = 2)  
+}
+
+# Add box around plot
+box(lwd = 2)
+
+# Add axis ticks and labels
+axis(side = 2, lwd.ticks = 2, las = 1, cex.axis = 1.25, 
+     labels = c("0", "10", "20"), at = c(0, 10, 20))
+
+axis(side = 4, labels = F, lwd.ticks = 2, at = c(0, 10, 20))
+
+axis(side = 1, lwd.ticks = 2, cex.axis = 1.25, las = 1, mgp = c(1, 1, 0),
+#    labels = c("0", "12", "24"), at = c(0, 12, 24))
+     labels = F, at = c(0, 12, 24))
+
+axis(side = 3, labels = F, lwd.ticks = 2, las = 1, cex.axis = 1, 
+   at = c(0, 12, 24))
+
+# Add axis labels
+mtext('Cell-specific fluorescence', side = 2, outer = TRUE, cex = 1.5, 
+      line = -2.5, adj = 0.6)
+
+#mtext('Time (h)', side = 1, outer = TRUE, cex = 1.5, 
+#      line = -4, adj = 0.5)
+
+# Add a legend
+legend("topleft", legend = c("DSM (full)", "DSM (diluted)", "DSM (full)", "DSM (diluted)"), 
+       col = c("grey", "grey", "green", "green"), lty = c(1, 2, 1, 2), 
+       cex = 1, bty = "n", bg = "transparent", seg.len = 1)
+
+# Plot 3 - CDSM medium
+
+# Make plot full strength DSM (wt) cells
+plot(csf.CDSM.full.wt[,1], csf.CDSM.full.wt[,2], xlim = c(-1, 25), 
+     ylim = c(0, 20), type = "l", 
+     lty = 1, col = "grey", lwd = 2, ylab = "", xlab = "", 
+     cex.lab = 1.5, las = 1, yaxt = "n", xaxt = "n")
+
+# Add lines for other replicates (color = grey)
+# We just plotted column 2 and 1
+# Now we plot column 3 and 1, and so forth
+for(i in 3:ncol(csf.CDSM.full.wt)) {
+  lines(csf.CDSM.full.wt[,1], csf.CDSM.full.wt[,i], col = "grey", lty = 1)  
+}
+
+# Add full strength CDSM (sigf) cells
+for(i in 2:ncol(csf.CDSM.full.sigf)) {
+  lines(csf.CDSM.full.sigf[,1], csf.CDSM.full.sigf[,i], col = "green", lty = 1)  
+}
+
+# Add diluted CDSM (wt)  cells
+for(i in 2:ncol(csf.CDSM.dil.wt)) {
+  lines(csf.CDSM.dil.wt[,1], csf.CDSM.dil.wt[,i], col = "grey", lty = 2)  
+}
+
+# Add diluted CDSM (sigf) cells
+for(i in 2:ncol(csf.CDSM.dil.sigf)) {
+  lines(csf.CDSM.dil.sigf[,1], csf.CDSM.dil.sigf[,i], col = "green", lty = 2)  
+}
+
+# Add box around plot
+box(lwd = 2)
+
+# Add axis ticks and labels
+axis(side = 2, lwd.ticks = 2, las = 1, cex.axis = 1.25, 
+     labels = c("0", "10", "20"), at = c(0, 10, 20))
+
+axis(side = 4, labels = F, lwd.ticks = 2, at = c(0, 25,50))
+
+axis(side = 1, lwd.ticks = 2, cex.axis = 1.25, las = 1, mgp = c(1, 1, 0),
+    labels = c("0", "12", "24"), at = c(0, 12, 24))
+
+axis(side = 3, labels = F, lwd.ticks = 2, las = 1, cex.axis = 1, 
+   at = c(0, 12, 24))
+
+# Add axis labels
+mtext('Cell-specific fluorescence', side = 2, outer = TRUE, cex = 1.5, 
+      line = -2.5, adj = 0.6)
+
+mtext('Time (h)', side = 1, outer = TRUE, cex = 1.5, 
+      line = -1, adj = 0.5)
+
+# Add a legend
+legend("topleft", legend = c("CDSM (full)", "CDSM (diluted)", "CDSM (full)", "CDSM (diluted)"), 
+       col = c("grey", "grey", "green", "green"), lty = c(1, 2, 1, 2), 
+       cex = 1, bty = "n", bg = "transparent", seg.len = 1)
+
+# Close plot device (completes writing of file)
+dev.off()
+graphics.off()
+
+# Shows plot in R console window
+img <- readPNG("~/Github/SporePlaque/figures/20240828_csf.png")
+grid.raster(img)
+```
