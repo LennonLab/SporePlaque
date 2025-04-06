@@ -47,17 +47,17 @@ png(filename="~/GitHub/SporePlaque/figures/plaque.size.png",
     width = 1200, height = 1200, res = 96*2)
 
 plot.new()
-par(mar = c(4, 8, 2, 8))
+par(mar = c(7, 7, 5, 7))
 plot(wt.kern, main = NA, xaxt = "n", yaxt = "n", cex.lab = 1.5, ylab = "",
-     xlab = "", xlim = c(0, 165), ylim = c(0, 0.055), lwd = 1.5, lty = 3, col = "red")
-lines(mut.kern, lwd = 1.5, lty = 3, col = "blue")
+     xlab = "", xlim = c(0, 165), ylim = c(0, 0.055), lwd = 2.5, lty = 1, col = "red")
+lines(mut.kern, lwd = 2.5, lty = 1, col = "blue")
 box(lwd=2)
 
 mtext('Density', side = 2, outer = TRUE, cex = 1.5, 
       line = -2, adj = 0.5)
 
 mtext('Plaque size (mm)', side = 1, outer = TRUE, 
-      cex = 1.5, line = -1, adj = 0.5)
+      cex = 1.5, line = -4, adj = 0.5)
 
 axis(side = 1, lwd.ticks = 2, cex.axis = 1.5, las = 1,
     labels = c("0", "50", "100", "150"), at = c(0, 50, 100, 150))
@@ -71,8 +71,8 @@ axis(side = 2, lwd.ticks = 2, cex.axis = 1.5, las = 1,
 axis(side = 4, lwd.ticks = 2, cex.axis = 1.5, las = 1,
     at = c(0, 0.025, 0.050), labels = F)
 
-text(35, 0.055, labels = "Spore-forming", cex = 0.85, col = "red")
-text(110, 0.025, labels = "Non-spore-forming", cex = 0.85, col = "blue")
+#text(35, 0.055, labels = "Spore-forming", cex = 0.85, col = "red")
+#text(110, 0.025, labels = "Non-spore-forming", cex = 0.85, col = "blue")
 
 # Close Plot Device
 dev.off()
